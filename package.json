@@ -8,10 +8,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aqing/s3ai-vscode"
+    "url": "https://github.com/ALingqing/s3ai-vscode"
   },
   "bugs": {
-    "url": "https://github.com/aqing/s3ai-vscode/issues"
+    "url": "https://github.com/ALingqing/s3ai-vscode/issues"
   },
   "engines": {
     "vscode": "^1.104.0"
@@ -106,7 +106,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "npx @vscode/vsce package --no-dependencies",
+    "package": "npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

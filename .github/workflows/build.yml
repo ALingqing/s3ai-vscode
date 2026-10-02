@@ -1,0 +1,63 @@
+name: Build & Package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --no-dependencies -o s3ai-vscode.vsix
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3ai-vscode-vsix
+          path: s3ai-vscode.vsix
+          if-no-files-found: error
+
+  publish-marketplace:
+    # 仅在打了 v* tag 时发布到 VS Code Marketplace
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish --no-dependencies -p "$VSCE_PAT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: s3ai-vscode.vsix
+          generate_release_notes: true
