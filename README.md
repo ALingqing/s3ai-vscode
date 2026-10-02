@@ -60,8 +60,7 @@ npm run compile
 > 被邀请人前 10 笔实付金额大于 15 元的法币充值，可获得 **5% 返利**，24 小时后自动转入余额。
 > 奖励仅限平台消费，不支持提现；赠送额度、兑换码、订阅、加密货币支付和人工充值不参与统计。
 
-- **注册入口**：<https://ai.furry.vg/sign-up?aff=JwkjwWvu>
-- **待转入注册奖励**：`0`　·　**累计注册奖励**：`0`　·　**邀请**：`0`
+- **注册入口**：[https://ai.furry.vg/](https://ai.furry.vg/sign-up?aff=JwkjwWvu)
 
 ### 前置条件
 
@@ -169,6 +168,6 @@ npm run package     # 打包 .vsix（需 npx @vscode/vsce）
 
 - S3AI 文档：<https://docs.furry.vg/>
 - 模型广场：<https://ai.furry.vg/pricing>
-- 主站：<https://ai.furry.vg/sign-up?aff=JwkjwWvu>
+- 主站：[https://ai.furry.vg/](https://ai.furry.vg/sign-up?aff=JwkjwWvu)
 
 
