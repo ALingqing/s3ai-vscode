@@ -1,0 +1,116 @@
+{
+  "name": "s3ai-vscode",
+  "displayName": "S3AI",
+  "description": "把 S3AI（ai.furry.vg）的模型接入 VS Code 聊天：模型选择、流式输出、工具调用（Agent 模式），API Key 安全保存。",
+  "version": "0.1.0",
+  "publisher": "aqing",
+  "icon": "media/icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aqing/s3ai-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/aqing/s3ai-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "keywords": [
+    "s3ai",
+    "furry.vg",
+    "openai",
+    "byok",
+    "chat",
+    "model provider"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "s3ai",
+        "displayName": "S3AI",
+        "managementCommand": "s3ai.manage",
+        "configuration": {
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "title": "API Key",
+              "description": "在 https://ai.furry.vg 获取的密钥（sk- 开头）。会安全保存。",
+              "secret": true
+            },
+            "baseUrl": {
+              "type": "string",
+              "title": "Base URL",
+              "description": "OpenAI 兼容接口地址。",
+              "default": "https://ai.furry.vg/v1"
+            }
+          }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "s3ai.manage",
+        "title": "管理 S3AI（模型与 Key）",
+        "category": "S3AI"
+      },
+      {
+        "command": "s3ai.setApiKey",
+        "title": "设置 API Key",
+        "category": "S3AI"
+      },
+      {
+        "command": "s3ai.clearApiKey",
+        "title": "清除 API Key",
+        "category": "S3AI"
+      },
+      {
+        "command": "s3ai.refreshModels",
+        "title": "刷新模型列表",
+        "category": "S3AI"
+      },
+      {
+        "command": "s3ai.openDocs",
+        "title": "打开 S3AI 文档",
+        "category": "S3AI"
+      }
+    ],
+    "configuration": {
+      "title": "S3AI",
+      "properties": {
+        "s3ai.models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "只显示白名单里的模型 ID，例如 `[\"deepseek-v4-flash\", \"claude-sonnet-4-6\"]`。留空 = 显示账号可用的全部模型。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npx @vscode/vsce package --no-dependencies",
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.104.0",
+    "typescript": "^5.6.0"
+  }
+}
