@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import {
 	ApiHttpError,
+	ApiStreamError,
 	ChatToolDef,
+	estimateTokenCount,
 	fetchModelList,
 	RemoteModel,
 	streamChatCompletion,
@@ -11,7 +13,8 @@ export const DEFAULT_BASE_URL = 'https://ai.furry.vg/v1';
 const SECRET_API_KEY = 's3ai.apiKey';
 const MODELS_CACHE_TTL = 5 * 60 * 1000;
 
-const DEFAULT_MAX_INPUT = 114688; // 128k - 16k
+const DEFAULT_MAX_INPUT = 32768;
+const MAX_INPUT_LIMIT = 114688; // 128k - 16k
 const DEFAULT_MAX_OUTPUT = 16384;
 
 /** 常见模型的能力预设（input/output 为该模型的上下文与输出上限） */
@@ -223,7 +226,9 @@ export class S3AIProvider implements vscode.LanguageModelChatProvider, vscode.Di
 		}
 
 		const allow = vscode.workspace.getConfiguration('s3ai').get<string[]>('models', []) ?? [];
-		const list = allow.length > 0 ? models.filter((m) => allow.includes(m.id)) : models;
+		const list = (allow.length > 0 ? models.filter((m) => allow.includes(m.id)) : models).filter(
+			(m) => !/^jev(?:-|$)/i.test(m.id),
+		);
 		return list.map((m) => this.toModelInfo(m, baseUrl));
 	}
 
@@ -245,6 +250,10 @@ export class S3AIProvider implements vscode.LanguageModelChatProvider, vscode.Di
 
 	private toModelInfo(m: RemoteModel, baseUrl: string): vscode.LanguageModelChatInformation {
 		const preset = MODEL_PRESETS[m.id] ?? {};
+		const configuredInput = vscode.workspace.getConfiguration('s3ai').get<number>('maxInputTokens', DEFAULT_MAX_INPUT);
+		const inputBudget = Number.isFinite(configuredInput)
+			? Math.min(MAX_INPUT_LIMIT, Math.max(8192, Math.floor(configuredInput)))
+			: DEFAULT_MAX_INPUT;
 		return {
 			id: m.id,
 			name: preset.name ?? m.id,
@@ -252,7 +261,7 @@ export class S3AIProvider implements vscode.LanguageModelChatProvider, vscode.Di
 			version: '1.0.0',
 			detail: 'S3AI',
 			tooltip: `S3AI（${hostOf(baseUrl)}）\n模型 ID：${m.id}`,
-			maxInputTokens: preset.input ?? DEFAULT_MAX_INPUT,
+			maxInputTokens: Math.min(preset.input ?? MAX_INPUT_LIMIT, inputBudget),
 			maxOutputTokens: preset.output ?? DEFAULT_MAX_OUTPUT,
 			capabilities: {
 				toolCalling: preset.tools ?? true,
@@ -330,7 +339,7 @@ export class S3AIProvider implements vscode.LanguageModelChatProvider, vscode.Di
 		_token: vscode.CancellationToken,
 	): Promise<number> {
 		const s = typeof text === 'string' ? text : messageToText(text);
-		return Math.max(1, Math.ceil(s.length / 3.5));
+		return estimateTokenCount(s);
 	}
 }
 
@@ -519,6 +528,9 @@ function hostOf(baseUrl: string): string {
 }
 
 function mapError(e: any, baseUrl: string): string {
+	if (e instanceof ApiStreamError) {
+		return e.message;
+	}
 	if (e instanceof ApiHttpError) {
 		if (e.status === 401) {
 			return 'S3AI：API Key 无效或未授权（401）。请运行「S3AI: 设置 API Key」重新配置。';

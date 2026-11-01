@@ -98,6 +98,14 @@
           },
           "default": [],
           "markdownDescription": "只显示白名单里的模型 ID，例如 `[\"deepseek-v4-flash\", \"claude-sonnet-4-6\"]`。留空 = 显示账号可用的全部模型。"
+        },
+        "s3ai.maxInputTokens": {
+          "type": "number",
+          "title": "上下文 token 预算",
+          "description": "较低预算会缩短长对话历史，通常能降低模型读取上下文的等待时间。",
+          "default": 32768,
+          "minimum": 8192,
+          "maximum": 114688
         }
       }
     }

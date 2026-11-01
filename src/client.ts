@@ -9,10 +9,29 @@ export interface RemoteModel {
 	owned_by?: string;
 }
 
+const CJK_CHARACTERS = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF\u31F0-\u31FF\uAC00-\uD7AF\u{20000}-\u{2FA1F}]/gu;
+
+export function estimateTokenCount(text: string): number {
+	const cjkCharacters = text.match(CJK_CHARACTERS)?.length ?? 0;
+	const otherCharacters = text.length - cjkCharacters;
+	return Math.max(1, Math.ceil(cjkCharacters + otherCharacters / 3.5));
+}
+
 export class ApiHttpError extends Error {
 	constructor(readonly status: number, message: string) {
 		super(message);
 		this.name = 'ApiHttpError';
+	}
+}
+
+export class ApiStreamError extends Error {
+	constructor(readonly model: string, readonly originalError: unknown) {
+		const detail = originalError instanceof Error ? originalError.message : String(originalError);
+		super(
+			`S3AI：模型「${model}」的流式响应意外中断${detail ? `（${detail}）` : ''}。` +
+			'通常是网络、代理或上游连接提前断开；请重试，若反复发生可缩短对话上下文或更换响应更快的模型。',
+		);
+		this.name = 'ApiStreamError';
 	}
 }
 
@@ -163,7 +182,7 @@ export async function streamChatCompletion(o: ChatRequestOptions): Promise<void>
 		return;
 	}
 
-	const reader: any = (res.body as any)?.getReader?.();
+	const reader: ReadableStreamDefaultReader<Uint8Array> | undefined = res.body?.getReader?.();
 	if (!reader) {
 		throw new Error('S3AI：响应为空（没有数据流）。');
 	}
@@ -172,38 +191,41 @@ export async function streamChatCompletion(o: ChatRequestOptions): Promise<void>
 	const toolAcc = new Map<number, { id: string; name: string; args: string }>();
 	let buf = '';
 	let finished = false;
-	while (!finished) {
-		const { done, value } = await reader.read();
-		if (done) {
-			break;
-		}
-		buf += decoder.decode(value, { stream: true });
-		let idx: number;
-		while ((idx = buf.indexOf('\n')) >= 0) {
-			let line = buf.slice(0, idx);
-			buf = buf.slice(idx + 1);
-			if (line.endsWith('\r')) {
-				line = line.slice(0, -1);
+	const cancelReader = () => {
+		void reader.cancel().catch(() => undefined);
+	};
+	o.signal.addEventListener('abort', cancelReader, { once: true });
+	try {
+		while (!finished && !o.signal.aborted) {
+			let result: Awaited<ReturnType<typeof reader.read>>;
+			try {
+				result = await reader.read();
+			} catch (e) {
+				if (o.signal.aborted) {
+					return;
+				}
+				throw new ApiStreamError(o.model, e);
 			}
-			if (!line || line.startsWith(':')) {
-				continue;
-			}
-			if (!line.startsWith('data:')) {
-				continue;
-			}
-			const payload = line.slice(5).trim();
-			if (payload === '[DONE]') {
-				finished = true;
+			if (result.done) {
+				buf += decoder.decode();
 				break;
 			}
-			let chunk: any;
-			try {
-				chunk = JSON.parse(payload);
-			} catch {
-				continue;
-			}
-			handleChunk(chunk, o.handlers, toolAcc);
+			buf += decoder.decode(result.value, { stream: true });
+			finished = processSseBuffer(buf, o, toolAcc);
+			buf = getSseRemainder(buf);
 		}
+		if (o.signal.aborted) {
+			return;
+		}
+		if (!finished && buf) {
+			processSseLine(buf, o, toolAcc);
+		}
+	} finally {
+		o.signal.removeEventListener('abort', cancelReader);
+		if (o.signal.aborted) {
+			cancelReader();
+		}
+		reader.releaseLock();
 	}
 
 	// 流结束后统一上报工具调用
@@ -219,6 +241,52 @@ export async function streamChatCompletion(o: ChatRequestOptions): Promise<void>
 			args: acc.args,
 		});
 	}
+}
+
+function processSseBuffer(
+	buffer: string,
+	options: ChatRequestOptions,
+	toolAcc: Map<number, { id: string; name: string; args: string }>,
+): boolean {
+	let idx: number;
+	while ((idx = buffer.indexOf('\n')) >= 0) {
+		const line = buffer.slice(0, idx);
+		buffer = buffer.slice(idx + 1);
+		if (processSseLine(line, options, toolAcc)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function getSseRemainder(buffer: string): string {
+	const idx = buffer.lastIndexOf('\n');
+	return idx < 0 ? buffer : buffer.slice(idx + 1);
+}
+
+function processSseLine(
+	line: string,
+	options: ChatRequestOptions,
+	toolAcc: Map<number, { id: string; name: string; args: string }>,
+): boolean {
+	if (line.endsWith('\r')) {
+		line = line.slice(0, -1);
+	}
+	if (!line || line.startsWith(':') || !line.startsWith('data:')) {
+		return false;
+	}
+	const payload = line.slice(5).trim();
+	if (payload === '[DONE]') {
+		return true;
+	}
+	let chunk: any;
+	try {
+		chunk = JSON.parse(payload);
+	} catch {
+		return false;
+	}
+	handleChunk(chunk, options.handlers, toolAcc);
+	return false;
 }
 
 function handleChunk(
